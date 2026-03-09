@@ -1,8 +1,10 @@
 package messaging
 
 import (
+	"context"
 	"log"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -45,15 +47,16 @@ func (r *RabbitMQ) NewListener(queueName string, keys ...string) (*RabbitListene
 	}, nil
 }
 
-func (l *RabbitListener) Subscribe(handler func([]byte) error) error {
+func (l *RabbitListener) Subscribe(context context.Context, handler func([]byte) error) error {
 	err := l.channel.Qos(10, 0, false)
 	if err != nil {
 		return err
 	}
+	consumerTag := uuid.NewString()
 
 	msgs, err := l.channel.Consume(
 		l.queueName,
-		"",
+		consumerTag,
 		false,
 		false,
 		false,
@@ -65,17 +68,24 @@ func (l *RabbitListener) Subscribe(handler func([]byte) error) error {
 		return err
 	}
 
-	for msg := range msgs {
-		if err := handler(msg.Body); err != nil {
-			log.Println(err)
+	for {
+		select {
+		case <-context.Done():
+			_ = l.channel.Cancel(consumerTag, false)
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
+				return nil
+			}
 
-			msg.Nack(false, true)
+			if err := handler(msg.Body); err != nil {
+				log.Println(err)
 
-			continue
+				msg.Nack(false, true)
+
+				continue
+			}
+			msg.Ack(false)
 		}
-
-		msg.Ack(true)
 	}
-
-	return nil
 }
