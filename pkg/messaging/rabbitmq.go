@@ -12,7 +12,7 @@ type RabbitBroker struct {
 	Exchange string
 }
 
-func NewRabbitMQ(url string, exchange string) (*RabbitMQ, error) {
+func NewRabbitMQ(url string) (*RabbitMQ, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
