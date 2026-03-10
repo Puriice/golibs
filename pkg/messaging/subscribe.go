@@ -13,7 +13,7 @@ type RabbitListener struct {
 	channel   *amqp.Channel
 }
 
-func (r *RabbitMQ) NewListener(queueName string, keys ...string) (*RabbitListener, error) {
+func (r RabbitBroker) NewListener(queueName string, keys ...string) (*RabbitListener, error) {
 	q, err := r.Channel.QueueDeclare(
 		queueName,
 		true,

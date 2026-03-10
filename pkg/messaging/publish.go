@@ -6,7 +6,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (r *RabbitMQ) Publish(key string, payload any) error {
+func (r RabbitBroker) Publish(key string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err

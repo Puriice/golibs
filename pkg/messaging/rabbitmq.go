@@ -4,7 +4,11 @@ import amqp "github.com/rabbitmq/amqp091-go"
 
 type RabbitMQ struct {
 	*amqp.Connection
-	Channel  *amqp.Channel
+	Channel *amqp.Channel
+}
+
+type RabbitBroker struct {
+	*RabbitMQ
 	Exchange string
 }
 
@@ -20,7 +24,19 @@ func NewRabbitMQ(url string, exchange string) (*RabbitMQ, error) {
 		return nil, err
 	}
 
-	err = ch.ExchangeDeclare(
+	return &RabbitMQ{
+		Connection: conn,
+		Channel:    ch,
+	}, nil
+}
+
+func (r RabbitMQ) Shutdown() {
+	r.Channel.Close()
+	r.Close()
+}
+
+func (r RabbitMQ) Broker(exchange string) (*RabbitBroker, error) {
+	err := r.Channel.ExchangeDeclare(
 		exchange,
 		"direct",
 		true,
@@ -34,14 +50,8 @@ func NewRabbitMQ(url string, exchange string) (*RabbitMQ, error) {
 		return nil, err
 	}
 
-	return &RabbitMQ{
-		Connection: conn,
-		Channel:    ch,
-		Exchange:   exchange,
+	return &RabbitBroker{
+		RabbitMQ: &r,
+		Exchange: exchange,
 	}, nil
-}
-
-func (r *RabbitMQ) Shutdown() {
-	r.Channel.Close()
-	r.Close()
 }
