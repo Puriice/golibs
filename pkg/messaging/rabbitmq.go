@@ -7,11 +7,6 @@ type RabbitMQ struct {
 	Channel *amqp.Channel
 }
 
-type RabbitBroker struct {
-	*RabbitMQ
-	Exchange string
-}
-
 func NewRabbitMQ(url string) (*RabbitMQ, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -33,25 +28,4 @@ func NewRabbitMQ(url string) (*RabbitMQ, error) {
 func (r RabbitMQ) Shutdown() {
 	r.Channel.Close()
 	r.Close()
-}
-
-func (r RabbitMQ) Broker(exchange string) (*RabbitBroker, error) {
-	err := r.Channel.ExchangeDeclare(
-		exchange,
-		"topic",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &RabbitBroker{
-		RabbitMQ: &r,
-		Exchange: exchange,
-	}, nil
 }
