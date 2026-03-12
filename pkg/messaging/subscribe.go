@@ -107,7 +107,11 @@ func (l *RabbitListener) Subscribe(context context.Context, handler func([]byte)
 			if err := handler(msg.Body); err != nil {
 				log.Println(err)
 
-				msg.Nack(false, true)
+				if msg.Redelivered {
+					msg.Nack(false, false)
+				} else {
+					msg.Nack(false, true)
+				}
 
 				continue
 			}
