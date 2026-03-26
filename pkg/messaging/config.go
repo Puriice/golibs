@@ -5,3 +5,11 @@ type RabbitConfig struct {
 	AutoDelete bool
 	NoWait     bool
 }
+
+func NewConfig() RabbitConfig {
+	return RabbitConfig{
+		Durable:    true,
+		AutoDelete: false,
+		NoWait:     false,
+	}
+}
