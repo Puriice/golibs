@@ -60,6 +60,10 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		return nil, err
 	}
 
+	if len(config.Keys) == 0 {
+		config.Keys = []string{""}
+	}
+
 	for _, key := range config.Keys {
 		err := r.Channel.QueueBind(
 			q.Name,
