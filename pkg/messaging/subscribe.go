@@ -15,11 +15,13 @@ type RabbitListener struct {
 }
 
 type RabbitListenerConfig struct {
+	RabbitConfig
 	QueueName     string
 	Keys          []string
 	PrefetchCount int
 	PrefetchSize  int
 	Global        bool
+	Exclusive     bool
 }
 
 func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerConfig {
@@ -29,6 +31,12 @@ func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerCon
 		PrefetchCount: 10,
 		PrefetchSize:  0,
 		Global:        false,
+		RabbitConfig: RabbitConfig{
+			Durable:    true,
+			AutoDelete: false,
+			NoWait:     false,
+		},
+		Exclusive: false,
 	}
 }
 
@@ -41,10 +49,10 @@ func (r RabbitBroker) NewListener(queueName string, keys ...string) (*RabbitList
 func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*RabbitListener, error) {
 	q, err := r.Channel.QueueDeclare(
 		config.QueueName,
-		true,
-		false,
-		false,
-		false,
+		config.Durable,
+		config.AutoDelete,
+		config.Exclusive,
+		config.NoWait,
 		nil,
 	)
 
