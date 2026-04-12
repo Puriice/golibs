@@ -44,7 +44,9 @@ func (s *Server) Start() {
 
 	<-quit
 
-	s.Database.Close()
+	if s.Database != nil {
+		s.Database.Close()
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
