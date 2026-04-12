@@ -42,14 +42,16 @@ func (s *Server) Start() {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	<-quit
+	go func() {
+		<-quit
 
-	if s.Database != nil {
-		s.Database.Close()
-	}
+		if s.Database != nil {
+			s.Database.Close()
+		}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	s.Shutdown(ctx)
+		s.Shutdown(ctx)
+	}()
 }
