@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -16,10 +17,19 @@ type RabbitMQ struct {
 	channel *amqp.Channel
 
 	mu sync.Mutex
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func NewRabbitMQ(url string) (*RabbitMQ, error) {
-	r := &RabbitMQ{url: url}
+func NewRabbitMQ(ctx context.Context, url string) (*RabbitMQ, error) {
+	cctx, cancel := context.WithCancel(ctx)
+
+	r := &RabbitMQ{
+		url:    url,
+		ctx:    cctx,
+		cancel: cancel,
+	}
 
 	if err := r.connect(); err != nil {
 		return nil, err
@@ -61,26 +71,36 @@ func (r *RabbitMQ) handleReconnect() {
 		r.channel.NotifyClose(chClose)
 
 		select {
+		case <-r.ctx.Done():
+			log.Println("🛑 Stopping reconnect loop")
+			return
+
 		case err := <-connClose:
 			log.Println("❌ Connection closed:", err)
+
 		case err := <-chClose:
 			log.Println("❌ Channel closed:", err)
 		}
 
 		log.Println("🔄 Reconnecting...")
 
+	loop:
 		for {
-			time.Sleep(3 * time.Second)
+			select {
+			case <-r.ctx.Done():
+				log.Println("🛑 Stop reconnecting")
+				return
 
-			if err := r.connect(); err != nil {
-				log.Println("Reconnect failed:", err)
-				continue
+			case <-time.After(3 * time.Second):
+				if err := r.connect(); err != nil {
+					log.Println("Reconnect failed:", err)
+					continue
+				}
+
+				log.Println("✅ Reconnected")
+				break loop
 			}
-
-			break
 		}
-
-		log.Println("✅ Reconnected")
 	}
 }
 
@@ -105,6 +125,13 @@ func (r *RabbitMQ) Shutdown() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.channel.Close()
-	r.conn.Close()
+	r.cancel()
+
+	if r.channel != nil {
+		r.channel.Close()
+	}
+
+	if r.conn != nil {
+		r.conn.Close()
+	}
 }
