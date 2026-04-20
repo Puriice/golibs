@@ -10,7 +10,7 @@ const (
 
 type BrokerConfig struct {
 	RabbitConfig
-	kind BrokerKind
+	Kind BrokerKind
 }
 
 type RabbitBroker struct {
@@ -21,7 +21,7 @@ type RabbitBroker struct {
 func NewBrokerConfig() BrokerConfig {
 	return BrokerConfig{
 		RabbitConfig: NewConfig(),
-		kind:         Topic,
+		Kind:         Topic,
 	}
 }
 
@@ -37,7 +37,7 @@ func (r *RabbitMQ) NewBrokerWithConfig(exchange string, config BrokerConfig) (*R
 
 	err = ch.ExchangeDeclare(
 		exchange,
-		string(config.kind),
+		string(config.Kind),
 		config.Durable,
 		config.AutoDelete,
 		false,
