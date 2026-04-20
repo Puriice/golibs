@@ -1,5 +1,7 @@
 package messaging
 
+import "github.com/rabbitmq/amqp091-go"
+
 type BrokerKind string
 
 const (
@@ -11,6 +13,7 @@ const (
 type BrokerConfig struct {
 	RabbitConfig
 	Kind BrokerKind
+	Args amqp091.Table
 }
 
 type RabbitBroker struct {
@@ -22,6 +25,7 @@ func NewBrokerConfig() BrokerConfig {
 	return BrokerConfig{
 		RabbitConfig: NewConfig(),
 		Kind:         Topic,
+		Args:         nil,
 	}
 }
 
@@ -42,7 +46,7 @@ func (r *RabbitMQ) NewBrokerWithConfig(exchange string, config BrokerConfig) (*R
 		config.AutoDelete,
 		false,
 		config.NoWait,
-		nil,
+		config.Args,
 	)
 	if err != nil {
 		return nil, err

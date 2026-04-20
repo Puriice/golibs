@@ -24,7 +24,7 @@ type RabbitListenerConfig struct {
 	PrefetchSize  int
 	Global        bool
 	Exclusive     bool
-	args          amqp.Table
+	Args          amqp.Table
 }
 
 func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerConfig {
@@ -40,6 +40,7 @@ func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerCon
 			NoWait:     false,
 		},
 		Exclusive: false,
+		Args:      nil,
 	}
 }
 
@@ -61,7 +62,7 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		config.AutoDelete,
 		config.Exclusive,
 		config.NoWait,
-		config.args,
+		config.Args,
 	)
 	if err != nil {
 		return nil, err
@@ -108,7 +109,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			l.config.AutoDelete,
 			l.config.Exclusive,
 			l.config.NoWait,
-			nil,
+			l.config.Args,
 		)
 		if err != nil {
 			log.Println("QueueDeclare failed:", err)
