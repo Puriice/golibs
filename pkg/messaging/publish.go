@@ -8,31 +8,11 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func publish(channel *amqp.Channel, exchange string, key string, mandatory bool, payload any) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	immediate := false
-
-	return channel.Publish(
-		exchange,
-		key,
-		mandatory,
-		immediate,
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-		},
-	)
-
-}
-
 func (r RabbitBroker) publishWithRetry(
 	key string,
-	payload any,
+	payload amqp.Publishing,
 	mandatory bool,
+	immediate bool,
 	maxAttempts int,
 ) error {
 	var lastErr error
@@ -52,7 +32,13 @@ func (r RabbitBroker) publishWithRetry(
 			continue
 		}
 
-		err = publish(ch, r.Exchange, key, mandatory, payload)
+		err = ch.Publish(
+			r.Exchange,
+			key,
+			mandatory,
+			immediate,
+			payload,
+		)
 		ch.Close()
 
 		if err == nil {
@@ -67,9 +53,46 @@ func (r RabbitBroker) publishWithRetry(
 }
 
 func (r RabbitBroker) Publish(key string, payload any) error {
-	return r.publishWithRetry(key, payload, false, 5)
+	body, err := json.Marshal(payload)
+
+	if err != nil {
+		return err
+	}
+
+	publishing := amqp.Publishing{
+		ContentType: "application/json",
+		Body:        body,
+	}
+
+	mandatory := false
+	immediate := false
+
+	return r.publishWithRetry(key, publishing, mandatory, immediate, 5)
+}
+
+func (r RabbitBroker) PublishRaw(
+	key string,
+	mandatory bool,
+	immediate bool,
+	payload amqp.Publishing,
+) error {
+	return r.publishWithRetry(key, payload, mandatory, immediate, 5)
 }
 
 func (r RabbitBroker) MandatoryPublish(key string, payload any) error {
-	return r.publishWithRetry(key, payload, true, 5)
+	body, err := json.Marshal(payload)
+
+	if err != nil {
+		return err
+	}
+
+	publishing := amqp.Publishing{
+		ContentType: "application/json",
+		Body:        body,
+	}
+
+	mandatory := true
+	immediate := false
+
+	return r.publishWithRetry(key, publishing, mandatory, immediate, 5)
 }
