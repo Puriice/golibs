@@ -95,11 +95,17 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 
 func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) error) error {
 	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+
 		ch, err := l.rabbit.NewChannel()
 
 		if err != nil {
 			log.Println("Get channel failed:", err)
-			time.Sleep(2 * time.Second)
+			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				return nil
+			}
 			continue
 		}
 
@@ -114,7 +120,9 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		)
 		if err != nil {
 			log.Println("QueueDeclare failed:", err)
-			time.Sleep(2 * time.Second)
+			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				return nil
+			}
 			continue
 		}
 
@@ -138,14 +146,18 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 
 		if bindFailed { // 👈 then retry outer loop
 			ch.Close()
-			time.Sleep(2 * time.Second)
+			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				return nil
+			}
 			continue
 		}
 
 		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
 		if err != nil {
 			log.Println("Qos failed:", err)
-			time.Sleep(2 * time.Second)
+			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				return nil
+			}
 			continue
 		}
 
@@ -162,7 +174,9 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		)
 		if err != nil {
 			log.Println("Consume failed:", err)
-			time.Sleep(2 * time.Second)
+			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				return nil
+			}
 			continue
 		}
 
@@ -213,6 +227,17 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		}
 
 		log.Println("🔄 Restarting consumer...")
-		time.Sleep(2 * time.Second)
+		if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+			return nil
+		}
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
 }
