@@ -185,6 +185,8 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		errChan := make(chan *amqp.Error)
 		ch.NotifyClose(errChan)
 
+		channelDead := false
+
 	loop:
 		for {
 			select {
@@ -194,6 +196,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 
 			case err := <-errChan:
 				log.Println("❌ Channel closed:", err)
+				channelDead = true
 				break loop
 
 			case msg, ok := <-msgs:
@@ -213,11 +216,14 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 					if err := handler(msg.Body); err != nil {
 						log.Println(err)
 
-						if msg.Redelivered {
-							msg.Nack(false, false)
-						} else {
-							msg.Nack(false, true)
+						if !channelDead { // 👈 guard every ack/nack
+							if msg.Redelivered {
+								msg.Nack(false, false)
+							} else {
+								msg.Nack(false, true)
+							}
 						}
+
 						return
 					}
 
