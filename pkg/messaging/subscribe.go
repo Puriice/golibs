@@ -25,6 +25,8 @@ type RabbitListenerConfig struct {
 	Global        bool
 	Exclusive     bool
 	Args          amqp.Table
+
+	Binding bool
 }
 
 func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerConfig {
@@ -41,6 +43,8 @@ func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerCon
 		},
 		Exclusive: false,
 		Args:      nil,
+
+		Binding: true,
 	}
 }
 
@@ -72,25 +76,40 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		config.Keys = []string{""}
 	}
 
-	for _, key := range config.Keys {
-		err := ch.QueueBind(
-			q.Name,
-			key,
-			r.Exchange,
-			false,
-			nil,
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &RabbitListener{
+	listener := &RabbitListener{
 		rabbit:    r.RabbitMQ,
 		queueName: q.Name,
 		exchange:  r.Exchange,
 		config:    config,
-	}, nil
+	}
+
+	if config.Binding {
+		err = listener.Bind()
+	}
+
+	return listener, err
+}
+
+func (l *RabbitListener) Bind() error {
+	ch, err := l.rabbit.getChannel()
+	if err != nil {
+		return err
+	}
+
+	for _, key := range l.config.Keys {
+		err := ch.QueueBind(
+			l.queueName,
+			key,
+			l.exchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) error) error {
