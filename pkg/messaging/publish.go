@@ -3,7 +3,6 @@ package messaging
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -39,21 +38,29 @@ func (r RabbitBroker) publishWithRetry(
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		ch, err := r.RabbitMQ.getChannel()
-		if err != nil {
-			lastErr = err
-			log.Printf("❌ [%d/%d] Get channel failed: %v\n", attempt, maxAttempts, err)
-		} else {
-			err = publish(ch, r.Exchange, key, mandatory, payload)
-			if err == nil {
-				return nil // ✅ success
-			}
-
-			lastErr = err
-			log.Printf("❌ [%d/%d] Publish failed: %v\n", attempt, maxAttempts, err)
+		conn := r.RabbitMQ.conn
+		if conn == nil {
+			lastErr = fmt.Errorf("no connection")
+			time.Sleep(2 * time.Second)
+			continue
 		}
 
-		time.Sleep(time.Duration(attempt*2) * time.Second)
+		ch, err := conn.Channel()
+		if err != nil {
+			lastErr = err
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		err = publish(ch, r.Exchange, key, mandatory, payload)
+		ch.Close()
+
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 
 	return fmt.Errorf("publish failed after %d attempts: %w", maxAttempts, lastErr)
