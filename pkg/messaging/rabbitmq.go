@@ -41,6 +41,9 @@ func NewRabbitMQ(ctx context.Context, url string) (*RabbitMQ, error) {
 }
 
 func (r *RabbitMQ) connect() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	conn, err := amqp.DialConfig(r.url, amqp.Config{
 		Heartbeat: 10 * time.Second,
 	})
@@ -113,6 +116,17 @@ func (r *RabbitMQ) getChannel() (*amqp.Channel, error) {
 	}
 
 	return r.channel, nil
+}
+
+func (r *RabbitMQ) NewChannel() (*amqp.Channel, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.conn == nil || r.conn.IsClosed() {
+		return nil, fmt.Errorf("connection not available")
+	}
+
+	return r.conn.Channel()
 }
 
 func (r *RabbitMQ) Channel() *amqp.Channel {

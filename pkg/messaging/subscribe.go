@@ -95,7 +95,8 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 
 func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) error) error {
 	for {
-		ch, err := l.rabbit.getChannel()
+		ch, err := l.rabbit.NewChannel()
+
 		if err != nil {
 			log.Println("Get channel failed:", err)
 			time.Sleep(2 * time.Second)
@@ -118,6 +119,8 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		}
 
 		// 🔁 Re-bind
+		bindFailed := false
+
 		for _, key := range l.config.Keys {
 			err := ch.QueueBind(
 				q.Name,
@@ -128,9 +131,15 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			)
 			if err != nil {
 				log.Println("QueueBind failed:", err)
-				time.Sleep(2 * time.Second)
-				continue
+				bindFailed = true
+				break
 			}
+		}
+
+		if bindFailed { // 👈 then retry outer loop
+			ch.Close()
+			time.Sleep(2 * time.Second)
+			continue
 		}
 
 		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
