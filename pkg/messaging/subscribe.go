@@ -24,6 +24,7 @@ type RabbitListenerConfig struct {
 	PrefetchSize  int
 	Global        bool
 	Exclusive     bool
+	args          amqp.Table
 }
 
 func NewRabbitListenerConfig(queueName string, keys ...string) RabbitListenerConfig {
@@ -60,7 +61,7 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		config.AutoDelete,
 		config.Exclusive,
 		config.NoWait,
-		nil,
+		config.args,
 	)
 	if err != nil {
 		return nil, err
@@ -90,53 +91,6 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		config:    config,
 	}, nil
 }
-
-// func (l *RabbitListener) Subscribe(context context.Context, handler func([]byte) error) error {
-// 	err := l.channel.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	consumerTag := uuid.NewString()
-
-// 	msgs, err := l.channel.Consume(
-// 		l.queueName,
-// 		consumerTag,
-// 		false,
-// 		false,
-// 		false,
-// 		false,
-// 		nil,
-// 	)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	for {
-// 		select {
-// 		case <-context.Done():
-// 			_ = l.channel.Cancel(consumerTag, false)
-// 			return nil
-// 		case msg, ok := <-msgs:
-// 			if !ok {
-// 				return nil
-// 			}
-
-// 			if err := handler(msg.Body); err != nil {
-// 				log.Println(err)
-
-// 				if msg.Redelivered {
-// 					msg.Nack(false, false)
-// 				} else {
-// 					msg.Nack(false, true)
-// 				}
-
-// 				continue
-// 			}
-// 			msg.Ack(false)
-// 		}
-// 	}
-// }
 
 func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) error) error {
 	for {
