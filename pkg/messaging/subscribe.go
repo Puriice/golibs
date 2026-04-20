@@ -3,14 +3,16 @@ package messaging
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type RabbitListener struct {
+	rabbit    *RabbitMQ
 	queueName string
-	channel   *amqp.Channel
+	exchange  string
 	config    RabbitListenerConfig
 }
 
@@ -47,7 +49,12 @@ func (r RabbitBroker) NewListener(queueName string, keys ...string) (*RabbitList
 }
 
 func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*RabbitListener, error) {
-	q, err := r.Channel.QueueDeclare(
+	ch, err := r.RabbitMQ.getChannel()
+	if err != nil {
+		return nil, err
+	}
+
+	q, err := ch.QueueDeclare(
 		config.QueueName,
 		config.Durable,
 		config.AutoDelete,
@@ -55,7 +62,6 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 		config.NoWait,
 		nil,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -65,69 +71,184 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 	}
 
 	for _, key := range config.Keys {
-		err := r.Channel.QueueBind(
+		err := ch.QueueBind(
 			q.Name,
 			key,
 			r.Exchange,
 			false,
 			nil,
 		)
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return &RabbitListener{
+		rabbit:    r.RabbitMQ,
 		queueName: q.Name,
-		channel:   r.Channel,
+		exchange:  r.Exchange,
 		config:    config,
 	}, nil
 }
 
-func (l *RabbitListener) Subscribe(context context.Context, handler func([]byte) error) error {
-	err := l.channel.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
-	if err != nil {
-		return err
-	}
-	consumerTag := uuid.NewString()
+// func (l *RabbitListener) Subscribe(context context.Context, handler func([]byte) error) error {
+// 	err := l.channel.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	consumerTag := uuid.NewString()
 
-	msgs, err := l.channel.Consume(
-		l.queueName,
-		consumerTag,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
+// 	msgs, err := l.channel.Consume(
+// 		l.queueName,
+// 		consumerTag,
+// 		false,
+// 		false,
+// 		false,
+// 		false,
+// 		nil,
+// 	)
 
-	if err != nil {
-		return err
-	}
+// 	if err != nil {
+// 		return err
+// 	}
 
+// 	for {
+// 		select {
+// 		case <-context.Done():
+// 			_ = l.channel.Cancel(consumerTag, false)
+// 			return nil
+// 		case msg, ok := <-msgs:
+// 			if !ok {
+// 				return nil
+// 			}
+
+// 			if err := handler(msg.Body); err != nil {
+// 				log.Println(err)
+
+// 				if msg.Redelivered {
+// 					msg.Nack(false, false)
+// 				} else {
+// 					msg.Nack(false, true)
+// 				}
+
+// 				continue
+// 			}
+// 			msg.Ack(false)
+// 		}
+// 	}
+// }
+
+func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) error) error {
 	for {
-		select {
-		case <-context.Done():
-			_ = l.channel.Cancel(consumerTag, false)
-			return nil
-		case msg, ok := <-msgs:
-			if !ok {
-				return nil
-			}
+		ch, err := l.rabbit.getChannel()
+		if err != nil {
+			log.Println("Get channel failed:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-			if err := handler(msg.Body); err != nil {
-				log.Println(err)
+		// 🔁 Re-declare queue after reconnect
+		q, err := ch.QueueDeclare(
+			l.config.QueueName,
+			l.config.Durable,
+			l.config.AutoDelete,
+			l.config.Exclusive,
+			l.config.NoWait,
+			nil,
+		)
+		if err != nil {
+			log.Println("QueueDeclare failed:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-				if msg.Redelivered {
-					msg.Nack(false, false)
-				} else {
-					msg.Nack(false, true)
-				}
-
+		// 🔁 Re-bind
+		for _, key := range l.config.Keys {
+			err := ch.QueueBind(
+				q.Name,
+				key,
+				l.exchange,
+				false,
+				nil,
+			)
+			if err != nil {
+				log.Println("QueueBind failed:", err)
+				time.Sleep(2 * time.Second)
 				continue
 			}
-			msg.Ack(false)
 		}
+
+		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
+		if err != nil {
+			log.Println("Qos failed:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		consumerTag := uuid.NewString()
+
+		msgs, err := ch.Consume(
+			q.Name,
+			consumerTag,
+			false,
+			false,
+			false,
+			false,
+			nil,
+		)
+		if err != nil {
+			log.Println("Consume failed:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		log.Println("📥 Consumer started")
+
+		errChan := make(chan *amqp.Error)
+		ch.NotifyClose(errChan)
+
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				_ = ch.Cancel(consumerTag, false)
+				return nil
+
+			case err := <-errChan:
+				log.Println("❌ Channel closed:", err)
+				break loop
+
+			case msg, ok := <-msgs:
+				if !ok {
+					log.Println("❌ msgs channel closed")
+					break loop
+				}
+
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Println("Recovered panic:", r)
+							msg.Nack(false, true)
+						}
+					}()
+
+					if err := handler(msg.Body); err != nil {
+						log.Println(err)
+
+						if msg.Redelivered {
+							msg.Nack(false, false)
+						} else {
+							msg.Nack(false, true)
+						}
+						return
+					}
+
+					msg.Ack(false)
+				}()
+			}
+		}
+
+		log.Println("🔄 Restarting consumer...")
+		time.Sleep(2 * time.Second)
 	}
 }

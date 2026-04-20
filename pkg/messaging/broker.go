@@ -1,16 +1,21 @@
 package messaging
 
 type RabbitBroker struct {
-	*RabbitMQ
+	RabbitMQ *RabbitMQ
 	Exchange string
 }
 
-func (r RabbitMQ) NewBroker(exchange string) (*RabbitBroker, error) {
+func (r *RabbitMQ) NewBroker(exchange string) (*RabbitBroker, error) {
 	return r.NewBrokerWithConfig(exchange, NewConfig())
 }
 
-func (r RabbitMQ) NewBrokerWithConfig(exchange string, config RabbitConfig) (*RabbitBroker, error) {
-	err := r.Channel.ExchangeDeclare(
+func (r *RabbitMQ) NewBrokerWithConfig(exchange string, config RabbitConfig) (*RabbitBroker, error) {
+	ch, err := r.getChannel()
+	if err != nil {
+		return nil, err
+	}
+
+	err = ch.ExchangeDeclare(
 		exchange,
 		"topic",
 		config.Durable,
@@ -19,38 +24,12 @@ func (r RabbitMQ) NewBrokerWithConfig(exchange string, config RabbitConfig) (*Ra
 		config.NoWait,
 		nil,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	return &RabbitBroker{
-		RabbitMQ: &r,
-		Exchange: exchange,
-	}, nil
-}
-
-func (r RabbitMQ) NewBroadcastBroker(exchange string) (*RabbitBroker, error) {
-	return r.NewBroadcastBrokerWithConfig(exchange, NewConfig())
-}
-
-func (r RabbitMQ) NewBroadcastBrokerWithConfig(exchange string, config RabbitConfig) (*RabbitBroker, error) {
-	err := r.Channel.ExchangeDeclare(
-		exchange,
-		"fanout",
-		config.Durable,
-		config.AutoDelete,
-		false,
-		config.NoWait,
-		nil,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &RabbitBroker{
-		RabbitMQ: &r,
+		RabbitMQ: r,
 		Exchange: exchange,
 	}, nil
 }
