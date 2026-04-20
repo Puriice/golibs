@@ -145,30 +145,31 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			continue
 		}
 
-		// 🔁 Re-bind
-		bindFailed := false
+		if l.config.Binding {
+			bindFailed := false
 
-		for _, key := range l.config.Keys {
-			err := ch.QueueBind(
-				q.Name,
-				key,
-				l.exchange,
-				false,
-				nil,
-			)
-			if err != nil {
-				log.Println("QueueBind failed:", err)
-				bindFailed = true
-				break
+			for _, key := range l.config.Keys {
+				err := ch.QueueBind(
+					q.Name,
+					key,
+					l.exchange,
+					false,
+					nil,
+				)
+				if err != nil {
+					log.Println("QueueBind failed:", err)
+					bindFailed = true
+					break
+				}
 			}
-		}
 
-		if bindFailed { // 👈 then retry outer loop
-			ch.Close()
-			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
-				return nil
+			if bindFailed { // 👈 then retry outer loop
+				ch.Close()
+				if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+					return nil
+				}
+				continue
 			}
-			continue
 		}
 
 		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
