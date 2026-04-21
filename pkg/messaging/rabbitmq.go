@@ -60,7 +60,7 @@ func (r *RabbitMQ) connect() error {
 	r.conn = conn
 	r.channel = ch
 
-	log.Println("✅ Connected to RabbitMQ")
+	log.Println("Connected to RabbitMQ")
 
 	return nil
 }
@@ -75,23 +75,23 @@ func (r *RabbitMQ) handleReconnect() {
 
 		select {
 		case <-r.ctx.Done():
-			log.Println("🛑 Stopping reconnect loop")
+			log.Println("Stopping reconnect loop")
 			return
 
 		case err := <-connClose:
-			log.Println("❌ Connection closed:", err)
+			log.Println("Connection closed:", err)
 
 		case err := <-chClose:
-			log.Println("❌ Channel closed:", err)
+			log.Println("Channel closed:", err)
 		}
 
-		log.Println("🔄 Reconnecting...")
+		log.Println("Reconnecting...")
 
 	loop:
 		for {
 			select {
 			case <-r.ctx.Done():
-				log.Println("🛑 Stop reconnecting")
+				log.Println("Stop reconnecting")
 				return
 
 			case <-time.After(3 * time.Second):
@@ -100,7 +100,7 @@ func (r *RabbitMQ) handleReconnect() {
 					continue
 				}
 
-				log.Println("✅ Reconnected")
+				log.Println("Reconnected")
 				break loop
 			}
 		}

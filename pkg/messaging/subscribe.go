@@ -122,7 +122,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 
 		if err != nil {
 			log.Println("Get channel failed:", err)
-			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+			if !sleepCtx(ctx, 2*time.Second) {
 				return nil
 			}
 			continue
@@ -139,7 +139,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		)
 		if err != nil {
 			log.Println("QueueDeclare failed:", err)
-			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+			if !sleepCtx(ctx, 2*time.Second) {
 				return nil
 			}
 			continue
@@ -163,9 +163,9 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 				}
 			}
 
-			if bindFailed { // 👈 then retry outer loop
+			if bindFailed {
 				ch.Close()
-				if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+				if !sleepCtx(ctx, 2*time.Second) {
 					return nil
 				}
 				continue
@@ -175,7 +175,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
 		if err != nil {
 			log.Println("Qos failed:", err)
-			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+			if !sleepCtx(ctx, 2*time.Second) {
 				return nil
 			}
 			continue
@@ -200,7 +200,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			continue
 		}
 
-		log.Println("📥 Consumer started")
+		log.Println("Consumer started")
 
 		errChan := make(chan *amqp.Error)
 		ch.NotifyClose(errChan)
@@ -215,13 +215,13 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 				return nil
 
 			case err := <-errChan:
-				log.Println("❌ Channel closed:", err)
+				log.Println("Channel closed:", err)
 				channelDead = true
 				break loop
 
 			case msg, ok := <-msgs:
 				if !ok {
-					log.Println("❌ msgs channel closed")
+					log.Println("Msgs channel closed")
 					break loop
 				}
 
@@ -236,7 +236,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 					if err := handler(msg.Body); err != nil {
 						log.Println(err)
 
-						if !channelDead { // 👈 guard every ack/nack
+						if !channelDead {
 							if msg.Redelivered {
 								msg.Nack(false, false)
 							} else {
@@ -252,8 +252,8 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			}
 		}
 
-		log.Println("🔄 Restarting consumer...")
-		if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
+		log.Println("Restarting consumer...")
+		if !sleepCtx(ctx, 2*time.Second) {
 			return nil
 		}
 	}
