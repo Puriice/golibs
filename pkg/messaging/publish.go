@@ -18,14 +18,7 @@ func (r RabbitBroker) publishWithRetry(
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		conn := r.RabbitMQ.conn
-		if conn == nil {
-			lastErr = fmt.Errorf("no connection")
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		ch, err := conn.Channel()
+		ch, err := r.RabbitMQ.NewChannel()
 		if err != nil {
 			lastErr = err
 			time.Sleep(2 * time.Second)

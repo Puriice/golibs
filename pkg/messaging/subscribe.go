@@ -55,10 +55,11 @@ func (r RabbitBroker) NewListener(queueName string, keys ...string) (*RabbitList
 }
 
 func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*RabbitListener, error) {
-	ch, err := r.RabbitMQ.getChannel()
+	ch, err := r.RabbitMQ.NewChannel()
 	if err != nil {
 		return nil, err
 	}
+	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
 		config.QueueName,
@@ -91,10 +92,11 @@ func (r RabbitBroker) NewListenerWithConfig(config RabbitListenerConfig) (*Rabbi
 }
 
 func (l *RabbitListener) Bind() error {
-	ch, err := l.rabbit.getChannel()
+	ch, err := l.rabbit.NewChannel()
 	if err != nil {
 		return err
 	}
+	defer ch.Close()
 
 	for _, key := range l.config.Keys {
 		err := ch.QueueBind(
@@ -139,6 +141,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		)
 		if err != nil {
 			log.Println("QueueDeclare failed:", err)
+			ch.Close()
 			if !sleepCtx(ctx, 2*time.Second) {
 				return nil
 			}
@@ -175,11 +178,18 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		err = ch.Qos(l.config.PrefetchCount, l.config.PrefetchSize, false)
 		if err != nil {
 			log.Println("Qos failed:", err)
+			ch.Close()
 			if !sleepCtx(ctx, 2*time.Second) {
 				return nil
 			}
 			continue
 		}
+
+		// Register before Consume so a close can't slip by unnoticed.
+		// Buffered so the library never blocks if we're busy in the handler
+		// or have already left the loop.
+		errChan := make(chan *amqp.Error, 1)
+		ch.NotifyClose(errChan)
 
 		consumerTag := uuid.NewString()
 
@@ -194,6 +204,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 		)
 		if err != nil {
 			log.Println("Consume failed:", err)
+			ch.Close()
 			if !sleepCtx(ctx, 2*time.Second) { // 👈 context-aware sleep
 				return nil
 			}
@@ -202,9 +213,6 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 
 		log.Println("Consumer started")
 
-		errChan := make(chan *amqp.Error)
-		ch.NotifyClose(errChan)
-
 		channelDead := false
 
 	loop:
@@ -212,6 +220,7 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 			select {
 			case <-ctx.Done():
 				_ = ch.Cancel(consumerTag, false)
+				ch.Close()
 				return nil
 
 			case err := <-errChan:
@@ -251,6 +260,8 @@ func (l *RabbitListener) Subscribe(ctx context.Context, handler func([]byte) err
 				}()
 			}
 		}
+
+		ch.Close()
 
 		log.Println("Restarting consumer...")
 		if !sleepCtx(ctx, 2*time.Second) {

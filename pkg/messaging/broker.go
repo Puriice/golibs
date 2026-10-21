@@ -34,10 +34,13 @@ func (r *RabbitMQ) NewBroker(exchange string) (*RabbitBroker, error) {
 }
 
 func (r *RabbitMQ) NewBrokerWithConfig(exchange string, config BrokerConfig) (*RabbitBroker, error) {
-	ch, err := r.getChannel()
+	// Short-lived channel: a rejected declare closes only this channel,
+	// not the shared one (which would trigger a full reconnect).
+	ch, err := r.NewChannel()
 	if err != nil {
 		return nil, err
 	}
+	defer ch.Close()
 
 	err = ch.ExchangeDeclare(
 		exchange,

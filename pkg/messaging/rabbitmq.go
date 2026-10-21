@@ -44,6 +44,12 @@ func (r *RabbitMQ) connect() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Drop the old connection (e.g. when only the shared channel died) so it
+	// doesn't linger and leave its channels' consumers hanging.
+	if r.conn != nil && !r.conn.IsClosed() {
+		r.conn.Close()
+	}
+
 	conn, err := amqp.DialConfig(r.url, amqp.Config{
 		Heartbeat: 10 * time.Second,
 	})
@@ -67,11 +73,15 @@ func (r *RabbitMQ) connect() error {
 
 func (r *RabbitMQ) handleReconnect() {
 	for {
-		connClose := make(chan *amqp.Error)
-		chClose := make(chan *amqp.Error)
+		// Buffered: amqp091 blocks on send to these, and only one of them is
+		// read below. An unbuffered one deadlocks the connection's shutdown.
+		connClose := make(chan *amqp.Error, 1)
+		chClose := make(chan *amqp.Error, 1)
 
+		r.mu.Lock()
 		r.conn.NotifyClose(connClose)
 		r.channel.NotifyClose(chClose)
+		r.mu.Unlock()
 
 		select {
 		case <-r.ctx.Done():
@@ -105,17 +115,6 @@ func (r *RabbitMQ) handleReconnect() {
 			}
 		}
 	}
-}
-
-func (r *RabbitMQ) getChannel() (*amqp.Channel, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.channel == nil {
-		return nil, fmt.Errorf("channel not initialized")
-	}
-
-	return r.channel, nil
 }
 
 func (r *RabbitMQ) NewChannel() (*amqp.Channel, error) {
