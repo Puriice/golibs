@@ -60,8 +60,9 @@ func (r RabbitBroker) Publish(key string, payload any) error {
 	}
 
 	publishing := amqp.Publishing{
-		ContentType: "application/json",
-		Body:        body,
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+		Body:         body,
 	}
 
 	mandatory := false
